@@ -2,13 +2,14 @@ package transformer
 
 import (
 	"bytes"
-	"code.cloudfoundry.org/lager/v3"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
+
+	"code.cloudfoundry.org/lager/v3"
 
 	"code.cloudfoundry.org/archiver/compressor"
 	"code.cloudfoundry.org/bbs/models"
@@ -574,7 +575,7 @@ func (t *transformer) StepsRunner(
 		longLivedAction = action
 	}
 
-	if t.useContainerProxy && container.EnableContainerProxy {
+	if t.useContainerProxy {
 		containerProxyStep := t.transformContainerProxyStep(
 			gardenContainer,
 			container,

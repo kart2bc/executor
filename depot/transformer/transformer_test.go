@@ -1,7 +1,6 @@
 package transformer_test
 
 import (
-	"code.cloudfoundry.org/durationjson"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"code.cloudfoundry.org/durationjson"
 
 	"code.cloudfoundry.org/bbs/models"
 	"code.cloudfoundry.org/clock/fakeclock"
@@ -367,7 +368,6 @@ var _ = Describe("Transformer", func() {
 								ContainerPort: 61001,
 							},
 						},
-						EnableContainerProxy: true,
 					},
 				}
 			})
@@ -517,22 +517,6 @@ var _ = Describe("Transformer", func() {
 				})
 			})
 
-			Context("when the container proxy is disabled on the container", func() {
-				BeforeEach(func() {
-					container.EnableContainerProxy = false
-				})
-
-				It("does not run the container proxy", func() {
-					Eventually(gardenContainer.RunCallCount).Should(Equal(1))
-					paths := []string{}
-					for i := 0; i < gardenContainer.RunCallCount(); i++ {
-						spec, _ := gardenContainer.RunArgsForCall(i)
-						paths = append(paths, spec.Path)
-					}
-
-					Expect(paths).NotTo(ContainElement("sh"))
-				})
-			})
 		})
 
 		Describe("declarative healthchecks", func() {
