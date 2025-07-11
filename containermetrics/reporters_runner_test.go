@@ -427,8 +427,17 @@ var _ = Describe("ReportersRunner", func() {
 						MetricsConfig: executor.MetricsConfig{Tags: map[string]string{"source_id": "source-id-without-age"}},
 					},
 				},
+				{
+					Guid:        "container-guid-without-metrics-at-t0",
+					MemoryLimit: megsToBytes(400 + proxyMemoryAllocationMB),
+					RunInfo: executor.RunInfo{
+						MetricsConfig: executor.MetricsConfig{Tags: map[string]string{"source_id": "source-id-without-metrics-at-t0", "instance_id": "1"}},
+					},
+				},
 			}
 			fakeExecutorClient.ListContainersReturnsOnCall(0, containers, nil)
+			fakeExecutorClient.ListContainersReturnsOnCall(1, containers, nil)
+			fakeExecutorClient.ListContainersReturnsOnCall(2, containers, nil)
 		})
 
 		It("emits memory and disk usage for each container, but no CPU", func() {
@@ -544,13 +553,15 @@ var _ = Describe("ReportersRunner", func() {
 		})
 
 		Context("when there is a container without preloaded rootfs", func() {
-			PIt("should emit memory usage that is not rescaled", func() {
+			It("should emit memory usage that is not rescaled", func() {
+				appMemory := megsToBytes(123)
+				expectedMemoryUsagePreloadedRootfs, expectedMemoryLimitPreloadedRootfs := calculateMemoryUsageWithProxy(appMemory, 200.0, proxyMemoryAllocationMB, float64(metricsAtT0["container-guid-without-preloaded-rootfs"].ContainerMetrics.MemoryLimitInBytes))
 				Eventually(sentMetrics).Should(ContainElement(
 					logging.ContainerMetric{
 						CpuPercentage:          0.0,
-						MemoryBytes:            metricsAtT0["container-guid-without-preloaded-rootfs"].ContainerMetrics.MemoryUsageInBytes,
+						MemoryBytes:            uint64(expectedMemoryUsagePreloadedRootfs),
 						DiskBytes:              metricsAtT0["container-guid-without-preloaded-rootfs"].ContainerMetrics.DiskUsageInBytes,
-						MemoryBytesQuota:       metricsAtT0["container-guid-without-preloaded-rootfs"].ContainerMetrics.MemoryLimitInBytes,
+						MemoryBytesQuota:       uint64(expectedMemoryLimitPreloadedRootfs),
 						DiskBytesQuota:         metricsAtT0["container-guid-without-preloaded-rootfs"].ContainerMetrics.DiskLimitInBytes,
 						AbsoluteCPUUsage:       uint64(metricsAtT0["container-guid-without-preloaded-rootfs"].ContainerMetrics.TimeSpentInCPU),
 						AbsoluteCPUEntitlement: metricsAtT0["container-guid-without-preloaded-rootfs"].ContainerMetrics.AbsoluteCPUEntitlementInNanoseconds,
@@ -581,13 +592,14 @@ var _ = Describe("ReportersRunner", func() {
 				Eventually(fakeExecutorClient.GetBulkMetricsCallCount).Should(Equal(2))
 			})
 
-			PIt("emits the new memory and disk usage, and the computed CPU percent", func() {
+			It("emits the new memory and disk usage, and the computed CPU percent", func() {
+				expectedMemoryUsageWithoutIndex, expectedMemoryLimitWithoutIndex := calculateMemoryUsageWithProxy(metricsAtT10["container-guid-without-index"].ContainerMetrics.MemoryUsageInBytes, 200.0, proxyMemoryAllocationMB, float64(metricsAtT10["container-guid-without-index"].ContainerMetrics.MemoryLimitInBytes))
 				Eventually(sentMetrics).Should(ContainElement(logging.ContainerMetric{
 					CpuPercentage:            20.0,
 					CpuEntitlementPercentage: 40.0,
-					MemoryBytes:              metricsAtT10["container-guid-without-index"].ContainerMetrics.MemoryUsageInBytes,
+					MemoryBytes:              uint64(expectedMemoryUsageWithoutIndex),
 					DiskBytes:                metricsAtT10["container-guid-without-index"].ContainerMetrics.DiskUsageInBytes,
-					MemoryBytesQuota:         metricsAtT10["container-guid-without-index"].ContainerMetrics.MemoryLimitInBytes,
+					MemoryBytesQuota:         uint64(expectedMemoryLimitWithoutIndex),
 					DiskBytesQuota:           metricsAtT10["container-guid-without-index"].ContainerMetrics.DiskLimitInBytes,
 					AbsoluteCPUUsage:         uint64(metricsAtT10["container-guid-without-index"].ContainerMetrics.TimeSpentInCPU),
 					AbsoluteCPUEntitlement:   metricsAtT10["container-guid-without-index"].ContainerMetrics.AbsoluteCPUEntitlementInNanoseconds,
@@ -600,12 +612,13 @@ var _ = Describe("ReportersRunner", func() {
 					},
 				}))
 
+				expectedMemoryUsageWithIndex, expectedMemoryLimitWithIndex := calculateMemoryUsageWithProxy(metricsAtT10["container-guid-with-index"].ContainerMetrics.MemoryUsageInBytes, 400.0, proxyMemoryAllocationMB, float64(metricsAtT10["container-guid-with-index"].ContainerMetrics.MemoryLimitInBytes))
 				Eventually(sentMetrics).Should(ContainElement(logging.ContainerMetric{
 					CpuPercentage:            30.0,
 					CpuEntitlementPercentage: 60.0,
-					MemoryBytes:              metricsAtT10["container-guid-with-index"].ContainerMetrics.MemoryUsageInBytes,
+					MemoryBytes:              uint64(expectedMemoryUsageWithIndex),
 					DiskBytes:                metricsAtT10["container-guid-with-index"].ContainerMetrics.DiskUsageInBytes,
-					MemoryBytesQuota:         metricsAtT10["container-guid-with-index"].ContainerMetrics.MemoryLimitInBytes,
+					MemoryBytesQuota:         uint64(expectedMemoryLimitWithIndex),
 					DiskBytesQuota:           metricsAtT10["container-guid-with-index"].ContainerMetrics.DiskLimitInBytes,
 					AbsoluteCPUUsage:         uint64(metricsAtT10["container-guid-with-index"].ContainerMetrics.TimeSpentInCPU),
 					AbsoluteCPUEntitlement:   metricsAtT10["container-guid-with-index"].ContainerMetrics.AbsoluteCPUEntitlementInNanoseconds,
@@ -618,12 +631,13 @@ var _ = Describe("ReportersRunner", func() {
 					},
 				}))
 
+				expectedMemoryUsagePreloadedRootfs, expectedMemoryLimitPreloadedRootfs := calculateMemoryUsageWithProxy(metricsAtT10["container-guid-without-preloaded-rootfs"].ContainerMetrics.MemoryUsageInBytes, 200.0, proxyMemoryAllocationMB, float64(metricsAtT10["container-guid-without-preloaded-rootfs"].ContainerMetrics.MemoryLimitInBytes))
 				Eventually(sentMetrics).Should(ContainElement(logging.ContainerMetric{
 					CpuPercentage:            40.0,
 					CpuEntitlementPercentage: 80.0,
-					MemoryBytes:              metricsAtT10["container-guid-without-preloaded-rootfs"].ContainerMetrics.MemoryUsageInBytes,
+					MemoryBytes:              uint64(expectedMemoryUsagePreloadedRootfs),
 					DiskBytes:                metricsAtT10["container-guid-without-preloaded-rootfs"].ContainerMetrics.DiskUsageInBytes,
-					MemoryBytesQuota:         metricsAtT10["container-guid-without-preloaded-rootfs"].ContainerMetrics.MemoryLimitInBytes,
+					MemoryBytesQuota:         uint64(expectedMemoryLimitPreloadedRootfs),
 					DiskBytesQuota:           metricsAtT10["container-guid-without-preloaded-rootfs"].ContainerMetrics.DiskLimitInBytes,
 					AbsoluteCPUUsage:         uint64(metricsAtT10["container-guid-without-preloaded-rootfs"].ContainerMetrics.TimeSpentInCPU),
 					AbsoluteCPUEntitlement:   metricsAtT10["container-guid-without-preloaded-rootfs"].ContainerMetrics.AbsoluteCPUEntitlementInNanoseconds,
@@ -636,12 +650,13 @@ var _ = Describe("ReportersRunner", func() {
 					},
 				}))
 
+				expectedMemoryUsageNoMetricsAtT0, expectedMemoryLimitNoMetricsAtT0 := calculateMemoryUsageWithProxy(metricsAtT10["container-guid-without-metrics-at-t0"].ContainerMetrics.MemoryUsageInBytes, 400.0, proxyMemoryAllocationMB, float64(metricsAtT10["container-guid-without-metrics-at-t0"].ContainerMetrics.MemoryLimitInBytes))
 				Eventually(sentMetrics).Should(ContainElement(logging.ContainerMetric{
 					CpuPercentage:            0.0,
 					CpuEntitlementPercentage: 0.0,
-					MemoryBytes:              metricsAtT10["container-guid-without-metrics-at-t0"].ContainerMetrics.MemoryUsageInBytes,
+					MemoryBytes:              uint64(expectedMemoryUsageNoMetricsAtT0),
 					DiskBytes:                metricsAtT10["container-guid-without-metrics-at-t0"].ContainerMetrics.DiskUsageInBytes,
-					MemoryBytesQuota:         metricsAtT10["container-guid-without-metrics-at-t0"].ContainerMetrics.MemoryLimitInBytes,
+					MemoryBytesQuota:         uint64(expectedMemoryLimitNoMetricsAtT0),
 					DiskBytesQuota:           metricsAtT10["container-guid-without-metrics-at-t0"].ContainerMetrics.DiskLimitInBytes,
 					AbsoluteCPUUsage:         uint64(metricsAtT10["container-guid-without-metrics-at-t0"].ContainerMetrics.TimeSpentInCPU),
 					AbsoluteCPUEntitlement:   metricsAtT10["container-guid-without-metrics-at-t0"].ContainerMetrics.AbsoluteCPUEntitlementInNanoseconds,
@@ -656,25 +671,29 @@ var _ = Describe("ReportersRunner", func() {
 			})
 
 			Context("Metrics", func() {
-				PIt("returns the cached metrics last emitted", func() {
+				It("returns the cached metrics last emitted", func() {
 					containerMetrics := statsReporter.Metrics()
-					Expect(containerMetrics).To(HaveLen(6))
+					Expect(containerMetrics).To(HaveLen(5))
+					
+					expectedMemoryUsageWithoutIndex, expectedMemoryLimitWithoutIndex := calculateMemoryUsageWithProxy(metricsAtT10["container-guid-without-index"].ContainerMetrics.MemoryUsageInBytes, 200.0, proxyMemoryAllocationMB, float64(metricsAtT10["container-guid-without-index"].ContainerMetrics.MemoryLimitInBytes))
 					Expect(containerMetrics).To(HaveKeyWithValue("container-guid-without-index", &containermetrics.CachedContainerMetrics{
 						MetricGUID:       "source-id-without-index",
 						CPUUsageFraction: 0.2,
-						MemoryUsageBytes: megsToBytes(1230),
+						MemoryUsageBytes: uint64(expectedMemoryUsageWithoutIndex),
 						DiskUsageBytes:   4560,
-						MemoryQuotaBytes: megsToBytes(7890),
+						MemoryQuotaBytes: uint64(expectedMemoryLimitWithoutIndex),
 						DiskQuotaBytes:   4096,
 						RxBytes:          &two,
 						TxBytes:          &two,
 					}))
+					
+					expectedMemoryUsageWithIndex, expectedMemoryLimitWithIndex := calculateMemoryUsageWithProxy(metricsAtT10["container-guid-with-index"].ContainerMetrics.MemoryUsageInBytes, 400.0, proxyMemoryAllocationMB, float64(metricsAtT10["container-guid-with-index"].ContainerMetrics.MemoryLimitInBytes))
 					Expect(containerMetrics).To(HaveKeyWithValue("container-guid-with-index", &containermetrics.CachedContainerMetrics{
 						MetricGUID:       "source-id-with-index",
 						CPUUsageFraction: 0.3,
-						MemoryUsageBytes: megsToBytes(3210),
+						MemoryUsageBytes: uint64(expectedMemoryUsageWithIndex),
 						DiskUsageBytes:   6540,
-						MemoryQuotaBytes: megsToBytes(9870),
+						MemoryQuotaBytes: uint64(expectedMemoryLimitWithIndex),
 						DiskQuotaBytes:   512,
 						RxBytes:          &two,
 						TxBytes:          &two,
@@ -689,12 +708,13 @@ var _ = Describe("ReportersRunner", func() {
 					// 	RxBytes:          &two,
 					// 	TxBytes:          &two,
 					// }))
+					expectedMemoryUsagePreloadedRootfs, expectedMemoryLimitPreloadedRootfs := calculateMemoryUsageWithProxy(metricsAtT10["container-guid-without-preloaded-rootfs"].ContainerMetrics.MemoryUsageInBytes, 200.0, proxyMemoryAllocationMB, float64(metricsAtT10["container-guid-without-preloaded-rootfs"].ContainerMetrics.MemoryLimitInBytes))
 					Expect(containerMetrics).To(HaveKeyWithValue("container-guid-without-preloaded-rootfs", &containermetrics.CachedContainerMetrics{
 						MetricGUID:       "source-id-without-preloaded-rootfs",
 						CPUUsageFraction: 0.4,
-						MemoryUsageBytes: megsToBytes(3450),
+						MemoryUsageBytes: uint64(expectedMemoryUsagePreloadedRootfs),
 						DiskUsageBytes:   4560,
-						MemoryQuotaBytes: megsToBytes(6780),
+						MemoryQuotaBytes: uint64(expectedMemoryLimitPreloadedRootfs),
 						DiskQuotaBytes:   2048,
 						RxBytes:          &two,
 						TxBytes:          &two,
@@ -709,12 +729,13 @@ var _ = Describe("ReportersRunner", func() {
 					// 	RxBytes:          &two,
 					// 	TxBytes:          &two,
 					// }))
+					expectedMemoryUsageNoMetricsAtT0, expectedMemoryLimitNoMetricsAtT0 := calculateMemoryUsageWithProxy(metricsAtT10["container-guid-without-metrics-at-t0"].ContainerMetrics.MemoryUsageInBytes, 400.0, proxyMemoryAllocationMB, float64(metricsAtT10["container-guid-without-metrics-at-t0"].ContainerMetrics.MemoryLimitInBytes))
 					Expect(containerMetrics).To(HaveKeyWithValue("container-guid-without-metrics-at-t0", &containermetrics.CachedContainerMetrics{
 						MetricGUID:       "source-id-without-metrics-at-t0",
 						CPUUsageFraction: 0.0,
-						MemoryUsageBytes: megsToBytes(3210),
+						MemoryUsageBytes: uint64(expectedMemoryUsageNoMetricsAtT0),
 						DiskUsageBytes:   6540,
-						MemoryQuotaBytes: megsToBytes(9870),
+						MemoryQuotaBytes: uint64(expectedMemoryLimitNoMetricsAtT0),
 						DiskQuotaBytes:   512,
 						RxBytes:          &two,
 						TxBytes:          &two,
@@ -728,13 +749,14 @@ var _ = Describe("ReportersRunner", func() {
 					Eventually(fakeExecutorClient.GetBulkMetricsCallCount).Should(Equal(3))
 				})
 
-				PIt("emits the new memory and disk usage, and the computed CPU percent", func() {
+				It("emits the new memory and disk usage, and the computed CPU percent", func() {
+					expectedMemoryUsageWithoutIndex, expectedMemoryLimitWithoutIndex := calculateMemoryUsageWithProxy(metricsAtT20["container-guid-without-index"].ContainerMetrics.MemoryUsageInBytes, 200.0, proxyMemoryAllocationMB, float64(metricsAtT20["container-guid-without-index"].ContainerMetrics.MemoryLimitInBytes))
 					Eventually(sentMetrics).Should(ContainElement(logging.ContainerMetric{
 						CpuEntitlementPercentage: 40.0,
 						CpuPercentage:            20.0,
-						MemoryBytes:              metricsAtT20["container-guid-without-index"].ContainerMetrics.MemoryUsageInBytes,
+						MemoryBytes:              uint64(expectedMemoryUsageWithoutIndex),
 						DiskBytes:                metricsAtT20["container-guid-without-index"].ContainerMetrics.DiskUsageInBytes,
-						MemoryBytesQuota:         metricsAtT20["container-guid-without-index"].ContainerMetrics.MemoryLimitInBytes,
+						MemoryBytesQuota:         uint64(expectedMemoryLimitWithoutIndex),
 						DiskBytesQuota:           metricsAtT20["container-guid-without-index"].ContainerMetrics.DiskLimitInBytes,
 						AbsoluteCPUUsage:         uint64(metricsAtT20["container-guid-without-index"].ContainerMetrics.TimeSpentInCPU),
 						AbsoluteCPUEntitlement:   metricsAtT20["container-guid-without-index"].ContainerMetrics.AbsoluteCPUEntitlementInNanoseconds,
@@ -747,12 +769,13 @@ var _ = Describe("ReportersRunner", func() {
 						},
 					}))
 
+					expectedMemoryUsageWithIndex, expectedMemoryLimitWithIndex := calculateMemoryUsageWithProxy(metricsAtT20["container-guid-with-index"].ContainerMetrics.MemoryUsageInBytes, 400.0, proxyMemoryAllocationMB, float64(metricsAtT20["container-guid-with-index"].ContainerMetrics.MemoryLimitInBytes))
 					Eventually(sentMetrics).Should(ContainElement(logging.ContainerMetric{
 						CpuEntitlementPercentage: 60.0,
 						CpuPercentage:            30.0,
-						MemoryBytes:              metricsAtT20["container-guid-with-index"].ContainerMetrics.MemoryUsageInBytes,
+						MemoryBytes:              uint64(expectedMemoryUsageWithIndex),
 						DiskBytes:                metricsAtT20["container-guid-with-index"].ContainerMetrics.DiskUsageInBytes,
-						MemoryBytesQuota:         metricsAtT20["container-guid-with-index"].ContainerMetrics.MemoryLimitInBytes,
+						MemoryBytesQuota:         uint64(expectedMemoryLimitWithIndex),
 						DiskBytesQuota:           metricsAtT20["container-guid-with-index"].ContainerMetrics.DiskLimitInBytes,
 						AbsoluteCPUUsage:         uint64(metricsAtT20["container-guid-with-index"].ContainerMetrics.TimeSpentInCPU),
 						AbsoluteCPUEntitlement:   metricsAtT20["container-guid-with-index"].ContainerMetrics.AbsoluteCPUEntitlementInNanoseconds,
@@ -765,12 +788,13 @@ var _ = Describe("ReportersRunner", func() {
 						},
 					}))
 
+					expectedMemoryUsagePreloadedRootfs, expectedMemoryLimitPreloadedRootfs := calculateMemoryUsageWithProxy(metricsAtT20["container-guid-without-preloaded-rootfs"].ContainerMetrics.MemoryUsageInBytes, 200.0, proxyMemoryAllocationMB, float64(metricsAtT20["container-guid-without-preloaded-rootfs"].ContainerMetrics.MemoryLimitInBytes))
 					Eventually(sentMetrics).Should(ContainElement(logging.ContainerMetric{
 						CpuEntitlementPercentage: 80.0,
 						CpuPercentage:            40.0,
-						MemoryBytes:              metricsAtT20["container-guid-without-preloaded-rootfs"].ContainerMetrics.MemoryUsageInBytes,
+						MemoryBytes:              uint64(expectedMemoryUsagePreloadedRootfs),
 						DiskBytes:                metricsAtT20["container-guid-without-preloaded-rootfs"].ContainerMetrics.DiskUsageInBytes,
-						MemoryBytesQuota:         metricsAtT20["container-guid-without-preloaded-rootfs"].ContainerMetrics.MemoryLimitInBytes,
+						MemoryBytesQuota:         uint64(expectedMemoryLimitPreloadedRootfs),
 						DiskBytesQuota:           metricsAtT20["container-guid-without-preloaded-rootfs"].ContainerMetrics.DiskLimitInBytes,
 						AbsoluteCPUUsage:         uint64(metricsAtT20["container-guid-without-preloaded-rootfs"].ContainerMetrics.TimeSpentInCPU),
 						AbsoluteCPUEntitlement:   metricsAtT20["container-guid-without-preloaded-rootfs"].ContainerMetrics.AbsoluteCPUEntitlementInNanoseconds,
@@ -783,12 +807,13 @@ var _ = Describe("ReportersRunner", func() {
 						},
 					}))
 
+					expectedMemoryUsageNoMetricsAtT0, expectedMemoryLimitNoMetricsAtT0 := calculateMemoryUsageWithProxy(metricsAtT20["container-guid-without-metrics-at-t0"].ContainerMetrics.MemoryUsageInBytes, 400.0, proxyMemoryAllocationMB, float64(metricsAtT20["container-guid-without-metrics-at-t0"].ContainerMetrics.MemoryLimitInBytes))
 					Eventually(sentMetrics).Should(ContainElement(logging.ContainerMetric{
 						CpuEntitlementPercentage: 120.0,
 						CpuPercentage:            60.0,
-						MemoryBytes:              metricsAtT20["container-guid-without-metrics-at-t0"].ContainerMetrics.MemoryUsageInBytes,
+						MemoryBytes:              uint64(expectedMemoryUsageNoMetricsAtT0),
 						DiskBytes:                metricsAtT20["container-guid-without-metrics-at-t0"].ContainerMetrics.DiskUsageInBytes,
-						MemoryBytesQuota:         metricsAtT20["container-guid-without-metrics-at-t0"].ContainerMetrics.MemoryLimitInBytes,
+						MemoryBytesQuota:         uint64(expectedMemoryLimitNoMetricsAtT0),
 						DiskBytesQuota:           metricsAtT20["container-guid-without-metrics-at-t0"].ContainerMetrics.DiskLimitInBytes,
 						AbsoluteCPUUsage:         uint64(metricsAtT20["container-guid-without-metrics-at-t0"].ContainerMetrics.TimeSpentInCPU),
 						AbsoluteCPUEntitlement:   metricsAtT20["container-guid-without-metrics-at-t0"].ContainerMetrics.AbsoluteCPUEntitlementInNanoseconds,
@@ -918,7 +943,7 @@ var _ = Describe("ReportersRunner", func() {
 				metricsAtT20["container-guid"] = createMetrics(3000*time.Nanosecond, 4000)
 			})
 
-			PIt("sends a spike metric with start as spike start and end as spike end", func() {
+			It("sends a spike metric with start as spike start and end as spike end", func() {
 				Eventually(fakeMetronClient.SendSpikeMetricsCallCount).Should(Equal(2))
 				spikeMetric := fakeMetronClient.SendSpikeMetricsArgsForCall(1)
 
@@ -934,7 +959,7 @@ var _ = Describe("ReportersRunner", func() {
 				metricsAtT20["container-guid"] = createMetrics(4400*time.Nanosecond, 4000)
 			})
 
-			PIt("sends spike metric on every iteration", func() {
+			It("sends spike metric on every iteration", func() {
 				Eventually(fakeMetronClient.SendSpikeMetricsCallCount).Should(Equal(3))
 
 				spikeMetric := fakeMetronClient.SendSpikeMetricsArgsForCall(0)
@@ -1115,7 +1140,7 @@ var _ = Describe("ReportersRunner", func() {
 				fakeExecutorClient.GetBulkMetricsReturns(metricsMap, nil)
 			})
 
-			PIt("will not emit any metrics", func() {
+			It("will not emit any metrics", func() {
 				fakeClock.WaitForWatcherAndIncrement(interval)
 				Eventually(fakeExecutorClient.GetBulkMetricsCallCount).Should(Equal(2))
 				Consistently(fakeMetronClient.SendAppMetricsCallCount).Should(Equal(0))
@@ -1133,7 +1158,7 @@ var _ = Describe("ReportersRunner", func() {
 				fakeExecutorClient.GetBulkMetricsReturns(metricsMap, nil)
 			})
 
-			PIt("sends a container metric with the correct instance id value", func() {
+			It("sends a container metric with the correct instance id value", func() {
 				fakeClock.WaitForWatcherAndIncrement(interval)
 				Eventually(fakeExecutorClient.GetBulkMetricsCallCount).Should(Equal(2))
 				Eventually(fakeMetronClient.SendAppMetricsCallCount).Should(Equal(1))
@@ -1152,7 +1177,7 @@ var _ = Describe("ReportersRunner", func() {
 				fakeExecutorClient.GetBulkMetricsReturns(metricsMap, nil)
 			})
 
-			PIt("sends a container metric with the correct instance id value", func() {
+			It("sends a container metric with the correct instance id value", func() {
 				fakeClock.WaitForWatcherAndIncrement(interval)
 				Eventually(fakeExecutorClient.GetBulkMetricsCallCount).Should(Equal(2))
 				Eventually(fakeMetronClient.SendAppMetricsCallCount).Should(Equal(1))
@@ -1171,7 +1196,7 @@ var _ = Describe("ReportersRunner", func() {
 				fakeExecutorClient.GetBulkMetricsReturns(metricsMap, nil)
 			})
 
-			PIt("keeps the metrics tag value of instance id", func() {
+			It("keeps the metrics tag value of instance id", func() {
 				fakeClock.WaitForWatcherAndIncrement(interval)
 				Eventually(fakeExecutorClient.GetBulkMetricsCallCount).Should(Equal(2))
 				Eventually(fakeMetronClient.SendAppMetricsCallCount).Should(Equal(1))
